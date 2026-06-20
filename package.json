@@ -1,0 +1,61 @@
+{
+  "name": "@snock/keymap",
+  "description": "",
+  "version": "0.6.0",
+  "type": "module",
+  "main": "./dist/keymap.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/keymap.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc",
+    "test:watch": "vitest",
+    "test": "vitest --run",
+    "test:browser": "wtr --config web-test-runner.config.mjs",
+    "test:browser:watch": "wtr --config web-test-runner.config.mjs --watch",
+    "docs": "deno doc --html --name=keymap --unstable-sloppy-imports src/core/keymap.ts",
+    "release:minor": "pnpm run build && pnpm version minor && pnpm publish --no-git-checks",
+    "release:patch": "pnpm run build && pnpm version patch && pnpm publish --no-git-checks",
+    "release:canary": "pnpm run build && pnpm version prerelease --preid=canary && pnpm publish --tag canary",
+    "gzip:watch": "fd | entr zsh -c pnpm run gzip:check",
+    "gzip:check": "cat out/main.js| gzip -9 > out/main.js.gz  && ls -la out/"
+  },
+  "devDependencies": {
+    "@esm-bundle/chai": "4.3.4-fix.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/chai": "^5.2.3",
+    "@types/node": "^22.10.2",
+    "@vitest/browser": "^2.1.8",
+    "@web/dev-server-esbuild": "^1.0.5",
+    "@web/test-runner": "^0.20.2",
+    "@web/test-runner-commands": "^0.9.0",
+    "@web/test-runner-playwright": "^0.11.1",
+    "jsdom": "^25.0.1",
+    "terser": "^5.37.0",
+    "typescript": "^5.4.5",
+    "vite": "^6.1.0",
+    "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "@types/react": ">=17.0.0",
+    "react": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "packageManager": "pnpm@9.10.0"
+}

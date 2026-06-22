@@ -88,3 +88,51 @@ describe('keymap.load', () => {
         expect(km.load({ 'a': () => {} })).toBe(km)
     })
 })
+
+describe('keymap.type — result', () => {
+    it("returns 'handled' when a binding matches and fires", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'a': fn })
+
+        expect(km.type('a')).toBe('handled')
+        expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("returns 'unhandled' when nothing matches", () => {
+        const km = new Keymap({ 'a': () => {} })
+
+        expect(km.type('x')).toBe('unhandled')
+    })
+
+    it("returns 'pending' midway through a multi-key sequence, then 'handled'", () => {
+        const gg = vi.fn()
+        // 'g e' shares the prefix, so a single 'g' is genuinely ambiguous
+        const km = new Keymap({ 'g g': gg, 'g e': () => {} })
+
+        expect(km.type('g')).toBe('pending')
+        expect(gg).not.toHaveBeenCalled()
+
+        expect(km.type('g')).toBe('handled')
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("returns 'unhandled' and resets when a pending sequence is broken", () => {
+        const km = new Keymap({ 'g g': () => {}, 'g e': () => {} })
+
+        expect(km.type('g')).toBe('pending')
+        expect(km.type('x')).toBe('unhandled') // 'g x' matches nothing
+    })
+
+    // operator-pending: a prefix of a longer binding must WAIT, never auto-fire,
+    // even when it is the only candidate. This is the hook for `d` + motion.
+    it("treats a lone multi-key prefix as 'pending', not an early fire", () => {
+        const dw = vi.fn()
+        const km = new Keymap({ 'd w': dw })
+
+        expect(km.type('d')).toBe('pending')
+        expect(dw).not.toHaveBeenCalled()
+
+        expect(km.type('w')).toBe('handled')
+        expect(dw).toHaveBeenCalledOnce()
+    })
+})

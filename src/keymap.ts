@@ -10,6 +10,7 @@ export type Binding<Context = unknown> = {
 
 export type BindingFunction<Context> = (context: Context) => void
 export type AnyBinding<Context> = Binding<Context> | BindingFunction<Context>
+export type TypeState = 'pending' | 'handled' | 'unhandled'
 
 export class Keymap<Context = unknown> {
     #map = new Map();
@@ -38,18 +39,23 @@ export class Keymap<Context = unknown> {
     type(event: KeyboardEvent | string, ctx?: Context): void {
         event = (typeof event === 'string') ? event : stringifyKeyInput(event)
         this.#buffer.push(event)
-        const matches = this.find(this.#buffer.join(' '))
+        const current =this.#buffer.join(' ')
+        const matches = this.find(current)
         if (matches.length === 1) {
+            const effect = this.#map.get(current)
             // @ts-ignore
-            const [_, effect] = matches.at(0)
             if (typeof effect === 'function') {
                 effect(ctx)
                 this.#buffer = []
+                return 'handled'
             }
         }
         if (matches.length === 0) {
             this.#buffer = []
+            return 'unhandled'
         }
+
+        return 'pending'
     }
 
     find(prefix: string): [string, Binding<Context>[]][]  {

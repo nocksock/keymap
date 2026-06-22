@@ -65,4 +65,15 @@ export class Keymap<Context = unknown> {
     get(key: string) {
         return this.#map.get(key)
     }
+
+    load(bindings: Record<string, AnyBinding<Context>>) {
+        this.#reset()
+        this.set(bindings)
+        return this
+    }
+
+    #reset() {
+        this.#map.clear()
+        this.#buffer = []
+    }
 }

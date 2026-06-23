@@ -25,9 +25,7 @@
     "docs": "deno doc --html --name=keymap --unstable-sloppy-imports src/core/keymap.ts",
     "release:minor": "pnpm run build && pnpm version minor && pnpm publish --no-git-checks",
     "release:patch": "pnpm run build && pnpm version patch && pnpm publish --no-git-checks",
-    "release:canary": "pnpm run build && pnpm version prerelease --preid=canary && pnpm publish --tag canary",
-    "gzip:watch": "fd | entr zsh -c pnpm run gzip:check",
-    "gzip:check": "cat out/main.js| gzip -9 > out/main.js.gz  && ls -la out/"
+    "release:canary": "pnpm run build && pnpm version prerelease --preid=canary && pnpm publish --tag canary"
   },
   "devDependencies": {
     "@esm-bundle/chai": "4.3.4-fix.0",

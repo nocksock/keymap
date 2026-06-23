@@ -1,4 +1,3 @@
-import { Binding } from './keymap'
 import { raise } from './errors'
 
 const isMacOS = (): boolean => {
@@ -55,12 +54,17 @@ export const parseInput = (input: string): KeyInput => {
   }
 }
 
-export const same = (a: KeyInput, b: KeyInput) =>
-  a.key === b.key
-  && a.ctrlKey === b.ctrlKey
-  && a.altKey === b.altKey
-  && a.shiftKey === b.shiftKey
-  && a.metaKey === b.metaKey;
+// Normalize a definition to its canonical form (modifier order, lowercased keys,
+// expanded meh/hyper/super) so 'shift+ctrl+a' and 'ctrl+shift+a' register identically.
+// set() has always been permissive about keys, so anything parseDefinition rejects
+// falls through lowercased rather than raising.
+export const canonicalize = (definition: string) => {
+  try {
+    return parseDefinition(definition).map(stringifyKeyInput).join(' ')
+  } catch {
+    return definition.toLowerCase()
+  }
+}
 
 export const stringifyKeyInput = (key: KeyInput) => {
   const mods = [];
@@ -77,41 +81,6 @@ export const stringifyKeyInput = (key: KeyInput) => {
 // Most keys match by lowercasing (e.g. 'Escape' → 'escape'), 
 // but the spacebar reports `key === ' '` which would not match the 'space' in VALID_KEYS.
 const normalizeEventKey = (key: string) => (key === ' ' ? 'space' : key.toLowerCase())
-
-export const filterKeymap = (keymap: ParsedKeymap, buffer: KeyboardEvent[]) =>
-  keymap.filter(([pattern]) => {
-    if (pattern.length < buffer.length) return false;
-    return buffer.every((input, index) => {
-      const patternKey = pattern[index];
-      return normalizeEventKey(input.key) === patternKey.key
-        && input.ctrlKey === patternKey.ctrlKey
-        && input.altKey === patternKey.altKey
-        && input.shiftKey === patternKey.shiftKey
-        && input.metaKey === patternKey.metaKey;
-    });
-  });
-
-type Chord = `${ValidModifier<Modifier>}+${Key}`
-type ValidModifier<T extends string> =
-  T extends Modifier
-  ? T : T extends `${Modifier}+${infer R}`
-  ? T extends `${infer F}+${R}`
-  ? `${F}+${Exclude<ValidModifier<R>, F>}`
-  : never
-  : Modifier
-
-
-export type ParsedKeymap = [KeyInput[], Binding?][]
-
-// prettier-ignore
-export type ValidKeymap<T extends string> =
-  T extends Key
-  ? T : T extends Chord
-  ? T : T extends `${Chord} ${infer R}`
-  ? T extends `${infer F} ${R}`
-  ? `${F} ${ValidKeymap<R>}`
-  : never
-  : Chord
 
 const MODIFIER_KEYS = ['control', 'shift', 'alt', 'meta'] as const
 

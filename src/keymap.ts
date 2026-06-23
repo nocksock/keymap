@@ -1,5 +1,6 @@
 import { raise } from "./errors";
 import { stringifyKeyInput } from "./keys";
+import { filterByPrefix } from "./maps";
 import { StackMap } from "./stackmap";
 
 export type Binding<Context = undefined> = {
@@ -16,7 +17,9 @@ export type TypeState = 'pending' | 'handled' | 'unhandled'
 const ORIGINAL = Symbol()
 
 export class Keymap<Context = undefined> {
-    #map = new StackMap<Binding<Context>>();
+    #map = new StackMap<Binding<Context>>({
+        shadowByPrefix: true
+    });
     #buffer: string[] = []
     context?: Context;
 
@@ -48,7 +51,7 @@ export class Keymap<Context = undefined> {
         event = (typeof event === 'string') ? event : stringifyKeyInput(event)
         this.#buffer.push(event)
         const current = this.#buffer.join(' ')
-        const matches = this.find(current)
+        const matches = filterByPrefix(this.#map, current)
         if (matches.length === 1 ) {
             const [keys, binding] = matches[0];
             if (current.length < keys.length) return 'pending'
@@ -66,11 +69,6 @@ export class Keymap<Context = undefined> {
         }
 
         return 'pending'
-    }
-
-    find(prefix: string): [string, Binding<Context>][]  {
-        return [...this.#map.entries()
-            .filter(([keys, _]) => keys.startsWith(prefix))]
     }
 
     // using an arrow function so it can be used as an event handler without needing to bind it
@@ -122,5 +120,9 @@ export class Keymap<Context = undefined> {
     #reset() {
         this.#map.clear()
         this.#buffer = []
+    }
+
+    current() {
+        return this.#map
     }
 }

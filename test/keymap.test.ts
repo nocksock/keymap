@@ -270,3 +270,58 @@ describe('object binding config ({ group, description, effect })', () => {
         expect(plain).toHaveBeenCalledOnce()
     })
 })
+
+describe('keymap.stack — cross-layer shared prefix', () => {
+    // Rule: the TOPMOST layer that has any candidate (complete OR prefix) for the
+    // current buffer owns the resolution; lower layers cannot extend or complete a
+    // buffer the top already claims. This stays decidable without a timeout and keeps
+    // the complete-vs-prefix ambiguity from ever spanning layers.
+
+    it("a top single-key binding shadows a base sequence that shares its prefix", () => {
+        const gg = vi.fn()
+        const g = vi.fn()
+        const km = new Keymap({ 'g g': gg })
+
+        km.push({ 'g': g }) // top claims 'g' as a complete binding
+
+        expect(km.type('g')).toBe('handled')
+        expect(g).toHaveBeenCalledOnce()
+        expect(gg).not.toHaveBeenCalled() // base 'g g' is unreachable while top is active
+
+        // a repeat fires the top 'g' again — it never builds toward the base 'g g'
+        expect(km.type('g')).toBe('handled')
+        expect(g).toHaveBeenCalledTimes(2)
+        expect(gg).not.toHaveBeenCalled()
+    })
+
+    it("restores the base sequence after the shadowing layer is popped", () => {
+        const gg = vi.fn()
+        const g = vi.fn()
+        const km = new Keymap({ 'g g': gg })
+
+        km.push({ 'g': g })
+        km.pop()
+
+        km.type('g')
+        km.type('g')
+
+        expect(gg).toHaveBeenCalledOnce() // 'g g' reachable again
+        expect(g).not.toHaveBeenCalled()
+    })
+
+    it("a top sequence shadows a base single-key that shares its prefix", () => {
+        const g = vi.fn()
+        const gg = vi.fn()
+        const km = new Keymap({ 'g': g })
+
+        km.push({ 'g g': gg }) // top claims the 'g' prefix via 'g g'
+
+        // top owns the 'g' prefix, so the first 'g' waits instead of firing base 'g'
+        expect(km.type('g')).toBe('pending')
+        expect(g).not.toHaveBeenCalled()
+
+        expect(km.type('g')).toBe('handled')
+        expect(gg).toHaveBeenCalledOnce()
+        expect(g).not.toHaveBeenCalled() // base 'g' stays shadowed
+    })
+})

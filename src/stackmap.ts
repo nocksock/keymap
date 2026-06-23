@@ -1,14 +1,24 @@
 import { raise } from "./errors"
+import { mergeDistinctPrefix } from "./maps"
+
+type Options = {
+    shadowByPrefix: boolean
+}
 
 export interface StackMap<V> extends Map<string, V> {}
 
 export class StackMap<V> {
     #stack: Map<string, V>[] = []
     #map = new Map<string, V>()
+    #options = {shadowByPrefix: false}
 
-    constructor() {
+    constructor(opts?: Options) {
+        if (opts) {
+            this.#options = Object.assign({}, this.#options, opts)
+        }
+
         return new Proxy(this, {
-            get(target, prop, receiver) {
+            get(target, prop, _receiver) {
                 if (prop in target.#map) {
                     // @ts-ignore
                     const value = target.#map[prop];
@@ -21,15 +31,20 @@ export class StackMap<V> {
         })
     }
 
-    push(map: Record<string, V> | Map<string, V>) {
+    push(map: Record<string, V>) {
         this.#stack.push(this.#map)
-        this.#map = new Map([...this.#map, ... (
-            typeof map === 'object'
-                ? map instanceof Map
-                    ? map
-                    : Object.entries(map)
-                : raise("push expects Map or {}")
-        )])
+
+        if (this.#options.shadowByPrefix) {
+            this.#map = mergeDistinctPrefix(this.#map, map);
+        } else {
+            this.#map = new Map([...this.#map, ... (
+                typeof map === 'object'
+                    ? map instanceof Map
+                        ? map
+                        : Object.entries(map)
+                    : raise("push expects Map or {}")
+            )])
+        }
 
         return this
     }

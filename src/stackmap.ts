@@ -1,4 +1,3 @@
-import { raise } from "./errors"
 import { mergeDistinctPrefix } from "./maps"
 
 type Options = {
@@ -9,50 +8,33 @@ export type PushOptions = {
     exclusive: true
 }
 
-export interface StackMap<V> extends Map<string, V> {}
-
-export class StackMap<V> {
+export class StackMap<V> extends Map<string, V> {
     #stack: Map<string, V>[] = []
-    #map = new Map<string, V>()
-    #options = {shadowByPrefix: false}
+    #shadowByPrefix: boolean
 
     constructor(opts?: Options) {
-        if (opts) {
-            this.#options = Object.assign({}, this.#options, opts)
-        }
-
-        return new Proxy(this, {
-            get(target, prop, _receiver) {
-                if (prop in target.#map) {
-                    // @ts-ignore
-                    const value = target.#map[prop];
-                    return typeof value === 'function' ? value.bind(target.#map) : value;
-                }
-                // @ts-ignore
-                const value = target[prop];
-                return typeof value === 'function' ? value.bind(target) : value;
-            }
-        })
+        super()
+        this.#shadowByPrefix = opts?.shadowByPrefix ?? false
     }
 
-    push(map: Record<string, V>, opts: PushOptions) {
-        this.#stack.push(this.#map)
+    #replace(next: Map<string, V>) {
+        this.clear()
+        for (const [key, value] of next) this.set(key, value)
+    }
 
-        if (this.#options.shadowByPrefix && !opts?.exclusive) {
-            this.#map = mergeDistinctPrefix(this.#map, map);
-            return this;
-        } 
-
-        this.#map = new Map(Object.entries(map))
-
+    push(map: Record<string, V>, opts?: PushOptions) {
+        this.#stack.push(new Map(this))
+        this.#replace(
+            this.#shadowByPrefix && !opts?.exclusive
+                ? mergeDistinctPrefix(this, map)
+                : new Map(Object.entries(map))
+        )
         return this
     }
 
     pop() {
-        const map = this.#stack.pop() 
-        if (map) {
-            this.#map = map;
-        }
+        const previous = this.#stack.pop()
+        if (previous) this.#replace(previous)
         return this
     }
-} 
+}

@@ -2,7 +2,7 @@
 
 A tiny keyboard-shortcut dispatcher: bind keys (and multi-key sequences) to actions, with stackable layers for modal UIs.
 
-- **~3.4 kB** minified, **~1.4 kB** gzipped
+- **~2.25 kB** minified, **~1.07 kB** gzipped
 - **Zero dependencies**
 - Single-key, modifier, and multi-key Vim-style sequences (`g g`, `d w`)
 - Stackable layers (`push`/`pop`) for modes and contextual overrides
@@ -11,7 +11,7 @@ A tiny keyboard-shortcut dispatcher: bind keys (and multi-key sequences) to acti
 ## Install
 
 ```ts
-import { Keymap } from "@snock/keymap"
+import { Keymap } from "@nocksock/keymap"
 ```
 
 ## Quick start
@@ -162,6 +162,21 @@ km.pop()                         // back to the base 'j'
 
 `push` and `pop` are LIFO, and `push` is chainable. `pop()` on an empty stack is a no-op — it never removes the base, and over-popping never corrupts the stack.
 
+### Exclusive layers
+
+A normal `push` shadows: keys the layer doesn't define fall through to layers below. An **exclusive** layer doesn't — it hides everything beneath it, so only its own keys resolve. Use it for truly modal states (a command palette, a confirm prompt) where the base bindings should be unreachable.
+
+```ts
+const km = new Keymap({ 'j': moveDown, 'k': moveUp })
+
+km.push({ 'x': confirm }, { exclusive: true })
+km.type('j') // 'unhandled' — base is hidden, no fall-through
+km.type('x') // confirm
+km.pop()     // base reachable (and merging) again
+```
+
+`list()` reflects only the exclusive layer while it's active. Exclusive and shadowing layers stack together in LIFO order — an exclusive layer hides everything below it until it's popped.
+
 ### Mode switching from an effect
 
 An effect can push a layer; it takes effect for the next key:
@@ -265,3 +280,7 @@ Returns the active resolution map (base merged with pushed layers).
 - Re-entrant effects are safe: an effect may call `type` again without corrupting the buffer.
 - The pending buffer stays bounded — sustained unmatched input always resets it, never grows it.
 - Popped layers are released for garbage collection.
+
+## Handcrafted
+
+This library is artisanal, hand-written code. Every line of the library source (`src/`) is 100% human-written — no LLM-generated implementation. LLM assistance was used **only** to help write the test suite and this README; the design and implementation are entirely human.

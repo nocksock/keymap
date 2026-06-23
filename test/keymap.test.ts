@@ -1,6 +1,7 @@
 import { describe, it, expect, vi  } from "vitest";
 import { Keymap } from "../src/keymap"
 import { parseInput } from "../src/keys";
+import { StackMap } from "../src/stackmap";
 
 describe("new Keymap", () => {
     it("can take nothing", () => {
@@ -584,3 +585,147 @@ describe('keymap.reset / blur', () => {
         expect(gg).not.toHaveBeenCalled() // buffer was cleared by the detached call
     })
 })
+
+describe('keymap.stack — exclusive (non-shadowing) push', () => {
+    it("an exclusive layer hides the base entirely (no fall-through)", () => {
+        const j = vi.fn()
+        const x = vi.fn()
+        const km = new Keymap({ 'j': j, 'k': () => {} })
+
+        km.push({ 'x': x }, { exclusive: true })
+
+        // base keys are NOT reachable while an exclusive layer is active
+        expect(km.type('j')).toBe('unhandled')
+        expect(j).not.toHaveBeenCalled()
+
+        // only the pushed layer resolves
+        km.type('x')
+        expect(x).toHaveBeenCalledOnce()
+    })
+
+    it("pop() restores the base after an exclusive push", () => {
+        const j = vi.fn()
+        const km = new Keymap({ 'j': j })
+
+        km.push({ 'x': () => {} }, { exclusive: true })
+        km.pop()
+
+        km.type('j')
+        expect(j).toHaveBeenCalledOnce() // base reachable (and merging) again
+    })
+
+    it("default push still shadows with fall-through (contrast)", () => {
+        const j = vi.fn()
+        const km = new Keymap({ 'j': j, 'k': () => {} })
+
+        km.push({ 'x': () => {} }) // no option → shadow + fall-through
+
+        km.type('j')
+        expect(j).toHaveBeenCalledOnce() // base 'j' still falls through
+    })
+
+    it("list() reflects only the exclusive layer", () => {
+        const km = new Keymap({ 'j': { group: 'base', description: 'down', effect: () => {} } })
+
+        km.push({ 'x': { group: 'modal', description: 'go', effect: () => {} } }, { exclusive: true })
+
+        expect(km.list().map((e) => e.keys)).toEqual(['x']) // base 'j' is hidden
+    })
+
+    it("stacks LIFO with a shadow layer below an exclusive one", () => {
+        const baseM = vi.fn()
+        const km = new Keymap({ 'm': baseM })
+
+        km.push({ 'j': () => {} })                    // shadow layer (m still falls through)
+        km.push({ 'x': () => {} }, { exclusive: true }) // exclusive on top hides everything else
+
+        expect(km.type('m')).toBe('unhandled') // base 'm' hidden by the exclusive layer
+        expect(baseM).not.toHaveBeenCalled()
+
+        km.pop() // drop the exclusive layer → back to the shadow layer over base
+        km.type('m')
+        expect(baseM).toHaveBeenCalledOnce() // 'm' falls through again
+    })
+})
+
+describe('performance & memory', () => {
+    it("balanced push/pop churn fully restores the base (no stack accumulation)", () => {
+        const base = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        for (let i = 0; i < 5_000; i++) {
+            km.push({ 'j': () => {} })
+            km.pop()
+        }
+
+        km.type('j')
+        expect(base).toHaveBeenCalledOnce() // every pop restored the prior map exactly
+    })
+
+    it("keeps the key buffer bounded under sustained unmatched input", () => {
+        const hit = vi.fn()
+        const km = new Keymap({ 'a b': hit })
+
+        // hammer with input that never matches — each keystroke must reset the buffer,
+        // so it can never grow without bound
+        for (let i = 0; i < 100_000; i++) km.type('z')
+
+        // a clean sequence still resolves => the buffer was never left in a bad/huge state
+        km.type('a'); km.type('b')
+        expect(hit).toHaveBeenCalledOnce()
+    })
+
+    it("stays within a generous budget for a large map + many keystrokes (catastrophic-regression guard)", () => {
+        const map: Record<string, () => void> = {}
+        for (let i = 0; i < 2_000; i++) map['k' + i] = () => {}
+        const km = new Keymap(map)
+
+        const start = performance.now()
+        for (let i = 0; i < 10_000; i++) km.type('k' + (i % 2_000))
+        const ms = performance.now() - start
+
+        // coarse guard: linear-ish work finishes in well under this; quadratic blows past it
+        expect(ms).toBeLessThan(2_000)
+    })
+
+    // Requires --expose-gc (e.g. run vitest with NODE_OPTIONS=--expose-gc); skipped otherwise.
+    it.skipIf(!(globalThis as any).gc)("releases a popped layer for garbage collection", async () => {
+        const km = new Keymap({ 'a': () => {} })
+
+        // create the layer in an isolated scope so the ONLY strong reference to `sentinel`
+        // is the effect closure held by the pushed layer
+        const ref = (() => {
+            const sentinel = {}
+            km.push({ 'b': () => { void sentinel } })
+            return new WeakRef(sentinel)
+        })()
+
+        km.pop() // dropping the layer should free the closure → the sentinel
+
+        ;(globalThis as any).gc()
+        await new Promise((r) => setTimeout(r, 0))
+        ;(globalThis as any).gc()
+
+        expect(ref.deref()).toBeUndefined()
+    })
+
+    // Makes the StackMap proxy's per-access .bind() allocation visible & deterministic.
+    // The proxy rebinds a fresh function on every property access, so each hot-path
+    // `map.entries()` in filterByPrefix allocates. Stable identity = the fix (cache/​no-bind).
+    it("StackMap returns a stable method reference (no per-access bind allocation)", () => {
+        const sm = new StackMap<() => void>()
+
+        expect(sm.entries).toBe(sm.entries) // a fresh bound fn per access would fail this
+        expect(sm.get).toBe(sm.get)
+    })
+
+    // Same allocation surfaced through the public hot path: type() reaches the proxy via
+    // filterByPrefix(this.#map, ...) -> map.entries().
+    it("the resolution map exposes a stable entries reference", () => {
+        const km = new Keymap({ 'a': () => {} })
+        const map = km.current()
+
+        expect(map.entries).toBe(map.entries)
+    })
+})
+

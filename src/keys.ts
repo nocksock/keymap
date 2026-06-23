@@ -55,13 +55,6 @@ export const parseInput = (input: string): KeyInput => {
   }
 }
 
-export const same = (a: KeyInput, b: KeyInput) =>
-  a.key === b.key
-  && a.ctrlKey === b.ctrlKey
-  && a.altKey === b.altKey
-  && a.shiftKey === b.shiftKey
-  && a.metaKey === b.metaKey;
-
 export const stringifyKeyInput = (key: KeyInput) => {
   const mods = [];
   if (key.ctrlKey) mods.push('ctrl');

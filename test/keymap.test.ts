@@ -7,11 +7,11 @@ describe("new Keymap", () => {
         const keymap = new Keymap()
     })
     it("can take object", () => {
-        const fn = () => {}
+        const action = () => {}
         const keymap = new Keymap({
-            'a': fn
+            'a': action
         })
-        expect(keymap.get('a')).toEqual(fn)
+        expect(keymap.get('a')).toEqual(action)
     })
     it('raises on invalid args', () => {
         expect(() => {
@@ -49,7 +49,7 @@ describe('keymap.type', () => {
 describe('keymap.load', () => {
     it("replaces the existing bindings", () => {
         const oldFn = vi.fn()
-        const newFn = vi.fn()
+        const newFn = {effect: vi.fn()}
         const km = new Keymap({ 'a': oldFn })
 
         km.load({ 'b': newFn })
@@ -62,7 +62,7 @@ describe('keymap.load', () => {
         // ...and the new one is active
         expect(km.get('b')).toEqual(newFn)
         km.type('b')
-        expect(newFn).toHaveBeenCalledOnce()
+        expect(newFn.effect).toHaveBeenCalledOnce()
     })
 
     it("resets the multi-key buffer", () => {
@@ -134,5 +134,139 @@ describe('keymap.type — result', () => {
 
         expect(km.type('w')).toBe('handled')
         expect(dw).toHaveBeenCalledOnce()
+    })
+})
+
+describe('keymap.stack (push / pop)', () => {
+    it("a pushed layer shadows a base binding for the same key", () => {
+        const base = vi.fn()
+        const top = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        km.push({ 'j': top })
+        km.type('j')
+
+        expect(base).not.toHaveBeenCalled()
+        expect(top).toHaveBeenCalledOnce()
+    })
+
+    it("falls through to the base for keys absent from the top layer", () => {
+        const j = vi.fn()
+        const k = vi.fn()
+        const km = new Keymap({ 'j': j, 'k': k })
+
+        km.push({ 'j': () => {} }) // top overrides only 'j'
+        km.type('k')
+
+        expect(k).toHaveBeenCalledOnce() // 'k' fell through to the base
+    })
+
+    it("pop() removes the top layer and restores the base", () => {
+        const base = vi.fn()
+        const top = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        km.push({ 'j': top })
+        km.pop()
+        km.type('j')
+
+        expect(base).toHaveBeenCalledOnce()
+        expect(top).not.toHaveBeenCalled()
+    })
+
+    it("stacks and pops layers in LIFO order", () => {
+        const base = vi.fn()
+        const a = vi.fn()
+        const b = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        km.push({ 'j': a })
+        km.push({ 'j': b })
+
+        km.type('j')
+        expect(b).toHaveBeenCalledOnce() // topmost wins
+
+        km.pop()
+        km.type('j')
+        expect(a).toHaveBeenCalledOnce() // next layer down
+
+        km.pop()
+        km.type('j')
+        expect(base).toHaveBeenCalledOnce() // back to base
+    })
+
+    it("resolves a multi-key sequence within a pushed layer", () => {
+        const gg = vi.fn()
+        const km = new Keymap()
+
+        km.push({ 'g g': gg, 'g e': () => {} }) // 'g e' keeps 'g' ambiguous
+        km.type('g')
+        km.type('g')
+
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("falls through to a base sequence when the top layer doesn't define it", () => {
+        const gg = vi.fn()
+        const km = new Keymap({ 'g g': gg })
+
+        km.push({ 'x': () => {} }) // unrelated top layer
+        km.type('g')
+        km.type('g')
+
+        expect(gg).toHaveBeenCalledOnce() // base sequence still reachable
+    })
+
+    it("pop() on an empty stack is a no-op (never removes the base)", () => {
+        const base = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        km.pop() // nothing pushed
+        km.type('j')
+
+        expect(base).toHaveBeenCalledOnce()
+    })
+
+    it("push is chainable", () => {
+        const km = new Keymap()
+        expect(km.push({ 'a': () => {} })).toBe(km)
+    })
+})
+
+describe('object binding config ({ group, description, effect })', () => {
+    it("fires the effect of an object-form binding", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'a': { group: 'nav', description: 'do a', effect: fn } })
+
+        expect(km.type('a')).toBe('handled')
+        expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("retains group and description on the stored binding", () => {
+        const km = new Keymap({ 'a': { group: 'nav', description: 'do a', effect: () => {} } })
+
+        expect(km.get('a')).toMatchObject({ group: 'nav', description: 'do a' })
+    })
+
+    it("passes ctx to an object-form effect, like a plain function", () => {
+        const fn = vi.fn()
+        const ctx = { who: 'me' }
+        const km = new Keymap({ 'a': { effect: fn } })
+
+        km.type('a', ctx)
+
+        expect(fn).toHaveBeenCalledWith(ctx)
+    })
+
+    it("mixes object-form and function-form bindings in one map", () => {
+        const obj = vi.fn()
+        const plain = vi.fn()
+        const km = new Keymap({ 'a': { effect: obj }, 'b': plain })
+
+        km.type('a')
+        km.type('b')
+
+        expect(obj).toHaveBeenCalledOnce()
+        expect(plain).toHaveBeenCalledOnce()
     })
 })

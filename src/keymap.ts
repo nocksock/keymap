@@ -1,7 +1,8 @@
 import { raise } from "./errors";
 import { stringifyKeyInput } from "./keys";
+import { StackMap } from "./stackmap";
 
-export type Binding<Context = unknown> = {
+export type Binding<Context = undefined> = {
     /** so the can be grouped in eg. "navigation", "formatting" */
     group?: string
     description?: string,
@@ -12,40 +13,49 @@ export type BindingFunction<Context> = (context: Context) => void
 export type AnyBinding<Context> = Binding<Context> | BindingFunction<Context>
 export type TypeState = 'pending' | 'handled' | 'unhandled'
 
-export class Keymap<Context = unknown> {
-    #map = new Map();
+const ORIGINAL = Symbol()
+
+export class Keymap<Context = undefined> {
+    #map = new StackMap<Binding<Context>>();
     #buffer: string[] = []
+    context?: Context;
 
     constructor(initial?: Record<string, AnyBinding<Context>>) {
         if (initial) this.set(initial)
     }
 
-    set(a1: string | Record<string, AnyBinding<Context>>, a2?: AnyBinding<Context>): this {
-        if (typeof a1 === 'object') {
-            Object.entries(a1).forEach(([keys, binding]) => {
+    set(keyOrMap: string | Record<string, AnyBinding<Context>>, a2?: AnyBinding<Context>): this {
+        if (typeof keyOrMap === 'object') {
+            Object.entries(keyOrMap).forEach(([keys, binding]) => {
                 return this.set(keys, binding)
             })
             return this;
         }
 
-        if (typeof a1 !== 'string' || !(['function', 'object'].includes(typeof a2))) {
-            raise(`Invalid keymap entry: ${a1} => ${typeof a2}`)
+        if (!a2) {
+            raise(`No binding given for ${keyOrMap}`)
         }
 
-        this.#map.set(a1, a2);
+        if (typeof keyOrMap !== 'string' || !(['function', 'object'].includes(typeof a2))) {
+            raise(`Invalid keymap entry: ${keyOrMap} => ${typeof a2}`)
+        }
+
+        this.#map.set(keyOrMap, this.#normalizeBinding(a2));
         return this;
     }
 
-    type(event: KeyboardEvent | string, ctx?: Context): void {
+    type(event: KeyboardEvent | string, ctx?: Context) {
         event = (typeof event === 'string') ? event : stringifyKeyInput(event)
         this.#buffer.push(event)
-        const current =this.#buffer.join(' ')
+        const current = this.#buffer.join(' ')
         const matches = this.find(current)
-        if (matches.length === 1) {
-            const effect = this.#map.get(current)
-            // @ts-ignore
+        if (matches.length === 1 ) {
+            const [keys, binding] = matches[0];
+            if (current.length < keys.length) return 'pending'
+            const {effect} = binding
             if (typeof effect === 'function') {
-                effect(ctx)
+                // @ts-ignore
+                effect(ctx || this.context)
                 this.#buffer = []
                 return 'handled'
             }
@@ -58,18 +68,38 @@ export class Keymap<Context = unknown> {
         return 'pending'
     }
 
-    find(prefix: string): [string, Binding<Context>[]][]  {
+    find(prefix: string): [string, Binding<Context>][]  {
         return [...this.#map.entries()
             .filter(([keys, _]) => keys.startsWith(prefix))]
     }
 
     // using an arrow function so it can be used as an event handler without needing to bind it
     handleKeyboardEvent = (e: KeyboardEvent) => {
-        this.type(e)
+        this.type(e, this.context)
+    }
+
+    #normalizeBinding(binding: AnyBinding<Context>) {
+        if (typeof binding === 'function') {
+            return {
+                effect: binding,
+                // carry it around so .set and .get work as expected from
+                // a user's POV, but internally we always have an object
+                [ORIGINAL]: binding
+            }
+        }
+        // @ts-ignore
+        binding[ORIGINAL] = binding
+        return binding
+    }
+
+    #unwrapBinding(binding: Binding<Context>): AnyBinding<Context> {
+        // @ts-ignore
+        return binding[ORIGINAL]
     }
 
     get(key: string) {
-        return this.#map.get(key)
+        const binding = this.#map.get(key)
+        return binding ? this.#unwrapBinding(binding) : undefined
     }
 
     load(bindings: Record<string, AnyBinding<Context>>) {
@@ -77,6 +107,17 @@ export class Keymap<Context = unknown> {
         this.set(bindings)
         return this
     }
+
+  push(map: Record<string, AnyBinding<Context>>) {
+      const normalized = Object.fromEntries(
+          Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
+      );
+      this.#map.push(normalized);
+      return this;
+  }
+
+
+    pop() { this.#map.pop(); return this; }
 
     #reset() {
         this.#map.clear()

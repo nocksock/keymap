@@ -1,0 +1,24 @@
+import { describe, it, expect } from "vitest";
+import { StackMap } from "../src/stackmap.js"
+
+describe("StackMap", () => {
+    it("is a map", () => {
+        const smap = new StackMap()
+        const bar = {}
+        smap.set("foo", bar)
+        expect(smap.get("foo")).toEqual(bar)
+    })
+    it("can stack", () => {
+        const smap = new StackMap()
+        const foo = { value: "foo"}
+        const bar = { value: "bar"}
+        const fallthrough = { value: "baz"}
+        smap.push({foo: foo, fallthrough})
+        smap.push({foo: bar })
+        expect(smap.get("fallthrough")).toEqual(fallthrough)
+        expect(smap.get("foo")).toEqual(bar)
+        smap.pop()
+        expect(smap.get("baz")).toEqual(undefined)
+        expect(smap.get("foo")).toEqual(foo)
+    })
+})

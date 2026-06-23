@@ -54,33 +54,26 @@ export const parseInput = (input: string): KeyInput => {
   }
 }
 
-// Normalize a definition to its canonical form (modifier order, lowercased keys,
-// expanded meh/hyper/super) so 'shift+ctrl+a' and 'ctrl+shift+a' register identically.
-// set() has always been permissive about keys, so anything parseDefinition rejects
-// falls through lowercased rather than raising.
-export const canonicalize = (definition: string) => {
+export const canonicalize = (input: string | KeyInput): string => {
+  if (typeof input !== 'string') return stringifyKeyInput(input)
   try {
-    return parseDefinition(definition).map(stringifyKeyInput).join(' ')
+    return parseDefinition(input).map(stringifyKeyInput).join(' ')
   } catch {
-    return definition.toLowerCase()
+    return input.toLowerCase()
   }
 }
 
-export const stringifyKeyInput = (key: KeyInput) => {
+const stringifyKeyInput = (key: KeyInput) => {
   const mods = [];
   if (key.ctrlKey) mods.push('ctrl');
   if (key.altKey) mods.push('alt');
   if (key.shiftKey) mods.push('shift');
   if (key.metaKey) mods.push('cmd');
   if (!isModifier(key.key.toLowerCase())) {
-    mods.push(normalizeEventKey(key.key));
+    mods.push(key.key === ' ' ? 'space' : key.key.toLowerCase());
   }
   return mods.join('+');
 };
-
-// Most keys match by lowercasing (e.g. 'Escape' → 'escape'), 
-// but the spacebar reports `key === ' '` which would not match the 'space' in VALID_KEYS.
-const normalizeEventKey = (key: string) => (key === ' ' ? 'space' : key.toLowerCase())
 
 const MODIFIER_KEYS = ['control', 'shift', 'alt', 'meta'] as const
 

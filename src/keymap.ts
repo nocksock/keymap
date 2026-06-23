@@ -1,5 +1,5 @@
 import { raise } from "./errors";
-import { isModifier, stringifyKeyInput } from "./keys";
+import { canonicalize, isModifier } from "./keys";
 import { filterByPrefix } from "./maps";
 import { PushOptions, StackMap } from "./stackmap";
 
@@ -50,15 +50,13 @@ export class Keymap<UserContext> {
             raise(`Invalid keymap entry: ${keyOrMap} => ${typeof a2}`)
         }
 
-        this.#map.set(keyOrMap, this.#normalizeBinding(a2));
+        this.#map.set(canonicalize(keyOrMap), this.#normalizeBinding(a2));
         return this;
     }
 
     type(event: KeyboardEvent | string, ctx?: UserContext) {
-        // normalize
-        const keyInput = (typeof event === 'string')
-            ? event.toLowerCase()
-            : stringifyKeyInput(event)
+        // normalize: strings and KeyboardEvents both reduce to one canonical key
+        const keyInput = canonicalize(event)
 
         // prevent lone modifiers to mess up the buffer
         if (isModifier(keyInput)) return;
@@ -128,7 +126,7 @@ export class Keymap<UserContext> {
     }
 
     get(key: string) {
-        const binding = this.#map.get(key)
+        const binding = this.#map.get(canonicalize(key))
         return binding ? this.#unwrapBinding(binding) : undefined
     }
 
@@ -140,7 +138,7 @@ export class Keymap<UserContext> {
 
     push(map: Record<string, AnyBinding<UserContext>>, opts: PushOptions) {
         const normalized = Object.fromEntries(
-            Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
+            Object.entries(map).map(([k, b]) => [canonicalize(k), this.#normalizeBinding(b)])
         );
         this.#map.push(normalized, opts);
         return this;

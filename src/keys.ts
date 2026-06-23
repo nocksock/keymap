@@ -68,7 +68,7 @@ export const stringifyKeyInput = (key: KeyInput) => {
   if (key.altKey) mods.push('alt');
   if (key.shiftKey) mods.push('shift');
   if (key.metaKey) mods.push('cmd');
-  mods.push(key.key);
+  mods.push(normalizeEventKey(key.key));
   return mods.join('+');
 };
 

@@ -325,3 +325,121 @@ describe('keymap.stack — cross-layer shared prefix', () => {
         expect(g).not.toHaveBeenCalled() // base 'g' stays shadowed
     })
 })
+
+describe('edge cases', () => {
+    // build a KeyboardEvent-shaped object for the non-string type() path
+    const evt = (key: string, mods: Partial<Record<'ctrlKey'|'altKey'|'shiftKey'|'metaKey', boolean>> = {}) =>
+        ({ key, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods }) as any
+
+    it("resolves a 3-key sequence and disambiguates at depth", () => {
+        const ab = vi.fn()
+        const km = new Keymap({ 'g a b': ab, 'g a c': () => {} })
+
+        km.type('g'); km.type('a'); km.type('b')
+
+        expect(ab).toHaveBeenCalledOnce()
+    })
+
+    it("recovers after a broken sequence", () => {
+        const gg = vi.fn()
+        const km = new Keymap({ 'g g': gg, 'g e': () => {} })
+
+        km.type('g'); km.type('x') // broken → should reset
+        km.type('g'); km.type('g') // clean run
+
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("overwriting a key with set replaces the binding", () => {
+        const a = vi.fn(), b = vi.fn()
+        const km = new Keymap({ 'x': a })
+
+        km.set('x', b)
+        km.type('x')
+
+        expect(b).toHaveBeenCalledOnce()
+        expect(a).not.toHaveBeenCalled()
+    })
+
+    it("over-popping past the base does not corrupt the stack", () => {
+        const base = vi.fn(), top = vi.fn()
+        const km = new Keymap({ 'j': base })
+
+        km.push({ 'j': top })
+        km.pop(); km.pop(); km.pop() // over-pop
+        km.push({ 'j': top })        // push still works
+        km.type('j')
+
+        expect(top).toHaveBeenCalledOnce()
+    })
+
+    it("a single map with both a key and a longer sequence waits on the prefix", () => {
+        // same complete-vs-prefix question, inside ONE map (not across layers)
+        const g = vi.fn(), gg = vi.fn()
+        const km = new Keymap({ 'g': g, 'g g': gg })
+
+        expect(km.type('g')).toBe('pending') // must not fire the short 'g' early
+        expect(g).not.toHaveBeenCalled()
+
+        expect(km.type('g')).toBe('handled')
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("an effect that pushes a layer takes effect for the next key (mode switch)", () => {
+        const inserted = vi.fn()
+        const km = new Keymap({ 'i': () => km.push({ 'x': inserted }) })
+
+        km.type('i') // enters 'insert' by pushing a layer
+        km.type('x')
+
+        expect(inserted).toHaveBeenCalledOnce()
+    })
+
+    it("load() while a layer is pushed gives a clean base (stack cleared)", () => {
+        const top = vi.fn(), newBase = vi.fn()
+        const km = new Keymap({ 'j': () => {} })
+
+        km.push({ 'j': top })
+        km.load({ 'j': newBase })
+        km.type('j')
+
+        expect(newBase).toHaveBeenCalledOnce()
+        expect(top).not.toHaveBeenCalled()
+    })
+
+    it("a re-entrant effect (calls type itself) does not corrupt the buffer", () => {
+        const inner = vi.fn()
+        const km = new Keymap({ 'a': () => km.type('b'), 'b': inner })
+
+        km.type('a')
+
+        expect(inner).toHaveBeenCalledOnce()
+    })
+
+    it("matches an Escape KeyboardEvent against an 'escape' binding", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'escape': fn })
+
+        km.type(evt('Escape'))
+
+        expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("matches a space KeyboardEvent against a 'space' binding", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'space': fn })
+
+        km.type(evt(' '))
+
+        expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("matches a Shift+H KeyboardEvent against a 'shift+h' binding", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'shift+h': fn }) // canonical lowercase registration
+
+        km.type(evt('H', { shiftKey: true }))
+
+        expect(fn).toHaveBeenCalledOnce()
+    })
+})

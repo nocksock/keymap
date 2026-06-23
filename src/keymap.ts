@@ -48,7 +48,7 @@ export class Keymap<Context = undefined> {
     }
 
     type(event: KeyboardEvent | string, ctx?: Context) {
-        event = (typeof event === 'string') ? event : stringifyKeyInput(event)
+        event = (typeof event === 'string') ? event.toLowerCase() : stringifyKeyInput(event)
         this.#buffer.push(event)
         const current = this.#buffer.join(' ')
         const matches = filterByPrefix(this.#map, current)
@@ -56,10 +56,10 @@ export class Keymap<Context = undefined> {
             const [keys, binding] = matches[0];
             if (current.length < keys.length) return 'pending'
             const {effect} = binding
+            this.#buffer = [] // clear buffer early, so effects could call type
             if (typeof effect === 'function') {
                 // @ts-ignore
                 effect(ctx || this.context)
-                this.#buffer = []
                 return 'handled'
             }
         }

@@ -23,7 +23,7 @@ const editor = new Keymap({
   'ctrl+s': () => save(),
 })
 
-document.addEventListener('keydown', (e) => editor.handleKeyboardEvent(e))
+document.addEventListener('keydown', editor.handleKeyboardEvent)
 ```
 
 ## Bindings

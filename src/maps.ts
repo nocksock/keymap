@@ -14,5 +14,5 @@ export const mergeDistinctPrefix = <C>(base: Map<string, C> | Record<string, C>,
         )
     ).concat(overlayEntries)
 
-    return new Map([...distinctEntries])
+    return new Map(distinctEntries)
 }

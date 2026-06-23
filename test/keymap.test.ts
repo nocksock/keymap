@@ -745,3 +745,24 @@ describe('load() vs the layer stack', () => {
     })
 })
 
+describe('modifier canonicalization', () => {
+    const evt = (key: string, mods: Partial<Record<'ctrlKey'|'altKey'|'shiftKey'|'metaKey', boolean>> = {}) =>
+        ({ key, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, preventDefault: () => {}, ...mods }) as any
+
+    it("matches regardless of modifier order (shift+ctrl+a -> Ctrl+Shift+A)", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'shift+ctrl+a': fn })
+
+        km.handleKeyboardEvent(evt('a', { ctrlKey: true, shiftKey: true }))
+        expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("matches a cmd combination written in any order", () => {
+        const fn = vi.fn()
+        const km = new Keymap({ 'cmd+shift+a': fn })
+
+        km.handleKeyboardEvent(evt('a', { metaKey: true, shiftKey: true }))
+        expect(fn).toHaveBeenCalledOnce()
+    })
+})
+

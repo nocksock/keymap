@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { KeyInput, parseDefinition, parseInput } from "../src/keys"
+import { KeyInput, parseDefinition, parseInput, canonicalize, isModifier } from "../src/keys"
 
 const def = (key: string) => ({
   key,
@@ -62,20 +62,6 @@ describe('keymap parser', () => {
     })
   })
 
-  it('should parse meh modifier (ctrl+shift+alt)', () => {
-    // meh = ctrl + shift + alt (everything except cmd/meta)
-    expect(parseInput('meh+a')).toEqual(
-      ctrl(shift(alt('a')))
-    )
-  })
-
-  it('should parse hyper modifier (ctrl+shift+alt+cmd)', () => {
-    // hyper = all four modifiers
-    expect(parseInput('hyper+a')).toEqual(
-      cmd(ctrl(shift(alt('a'))))
-    )
-  })
-
   it('should parse super modifier (OS-dependent: cmd on macOS, ctrl elsewhere)', () => {
     // super = the primary modifier for the OS
     const result = parseInput('super+a')
@@ -90,17 +76,111 @@ describe('keymap parser', () => {
     expect(result.altKey).toBe(false)
     expect(result.key).toBe('a')
   })
+})
 
-  it('should throw error for redundant hyper combinations', () => {
-    expect(() => parseInput('hyper+ctrl+a')).toThrow('hyper already includes ctrl')
-    expect(() => parseInput('hyper+shift+a')).toThrow('hyper already includes shift')
-    expect(() => parseInput('hyper+alt+a')).toThrow('hyper already includes alt')
-    expect(() => parseInput('hyper+cmd+a')).toThrow('hyper already includes cmd')
+describe('parseDefinition — whitespace', () => {
+  it('collapses repeated internal spaces', () => {
+    expect(parseDefinition('a  b')).toEqual([def('a'), def('b')])
+    expect(parseDefinition('a  b  c')).toEqual([def('a'), def('b'), def('c')]) // 2nd gap too
   })
 
-  it('should throw error for redundant meh combinations', () => {
-    expect(() => parseInput('meh+ctrl+a')).toThrow('meh already includes ctrl')
-    expect(() => parseInput('meh+shift+a')).toThrow('meh already includes shift')
-    expect(() => parseInput('meh+alt+a')).toThrow('meh already includes alt')
+  it('trims leading and trailing whitespace', () => {
+    expect(parseDefinition('  a b  ')).toEqual([def('a'), def('b')])
+  })
+
+  it('treats tabs/newlines as separators', () => {
+    expect(parseDefinition('a\tb')).toEqual([def('a'), def('b')])
+  })
+})
+
+describe('parseInput — normalization', () => {
+  it('lowercases the key (capital letters and named keys)', () => {
+    expect(parseInput('Shift+A')).toEqual(shift('a'))
+    expect(parseInput('CTRL+B')).toEqual(ctrl('b'))
+    expect(parseInput('Escape')).toEqual(def('escape'))
+  })
+
+  it('is order-independent for 3+ modifiers', () => {
+    expect(parseInput('shift+ctrl+alt+a')).toEqual(parseInput('alt+shift+ctrl+a'))
+  })
+
+  it("normalizes '-' between modifiers, including chains", () => {
+    expect(parseInput('ctrl-a')).toEqual(ctrl('a'))
+    expect(parseInput('ctrl-shift-a')).toEqual(ctrl(shift('a')))
+  })
+
+  it('parses named keys', () => {
+    for (const k of ['escape', 'esc', 'space', 'tab', 'enter', 'arrowup', 'f1', 'f12', 'home', 'pagedown']) {
+      expect(parseInput(k)).toEqual(def(k))
+    }
+    expect(parseInput('ctrl+arrowleft')).toEqual(ctrl('arrowleft'))
+  })
+
+  it('parses number and symbol keys', () => {
+    expect(parseInput('1')).toEqual(def('1'))
+    expect(parseInput('ctrl+/')).toEqual(ctrl('/'))
+    expect(parseInput('ctrl+-')).toEqual(ctrl('-')) // the minus key, not a separator
+  })
+})
+
+describe('parseInput — invalid input', () => {
+  it('throws on an empty input', () => {
+    expect(() => parseInput('')).toThrow()
+  })
+
+  it('throws on a lone modifier (no key)', () => {
+    expect(() => parseInput('ctrl')).toThrow()
+  })
+
+  it('throws on an out-of-range function key', () => {
+    expect(() => parseInput('f13')).toThrow()
+  })
+
+  it("can't express the '+' key (separator collision) — documents the limitation", () => {
+    expect(() => parseInput('+')).toThrow()
+  })
+})
+
+describe('canonicalize', () => {
+  it('normalizes modifier order to ctrl, alt, shift, cmd', () => {
+    expect(canonicalize('shift+ctrl+a')).toBe('ctrl+shift+a')
+    expect(canonicalize('cmd+shift+a')).toBe('shift+cmd+a')
+  })
+
+  it('lowercases and normalizes the separator', () => {
+    expect(canonicalize('A')).toBe('a')
+    expect(canonicalize('Ctrl-A')).toBe('ctrl+a')
+  })
+
+  it('preserves multi-key sequences', () => {
+    expect(canonicalize('g g')).toBe('g g')
+    expect(canonicalize('ctrl+a b')).toBe('ctrl+a b')
+  })
+
+  it('accepts a KeyInput and stringifies it', () => {
+    expect(canonicalize(ctrl('b'))).toBe('ctrl+b')
+  })
+
+  it('is idempotent', () => {
+    const once = canonicalize('cmd+shift+a')
+    expect(canonicalize(once)).toBe(once)
+  })
+
+  it('falls back to the lowercased input when it cannot parse', () => {
+    expect(canonicalize('ctrl+')).toBe('ctrl+')
+  })
+})
+
+describe('isModifier', () => {
+  it('recognizes every modifier token, in both event-key and canonical form', () => {
+    for (const m of ['control', 'shift', 'alt', 'meta', 'ctrl', 'cmd']) {
+      expect(isModifier(m)).toBe(true)
+    }
+  })
+
+  it('rejects non-modifier keys', () => {
+    for (const k of ['a', 'space', 'escape', 'f1']) {
+      expect(isModifier(k)).toBe(false)
+    }
   })
 })

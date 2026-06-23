@@ -2,7 +2,7 @@
 
 A tiny keyboard-shortcut dispatcher: bind keys (and multi-key sequences) to actions, with stackable layers for modal UIs.
 
-- **~2.25 kB** minified, **~1.07 kB** gzipped
+- **~3.00 kB** minified, **~1.44 kB** gzipped
 - **Zero dependencies**
 - Single-key, modifier, and multi-key Vim-style sequences (`g g`, `d w`)
 - Stackable layers (`push`/`pop`) for modes and contextual overrides
@@ -294,6 +294,23 @@ km.type('g') // a fresh first 'g'
 - Re-entrant effects are safe: an effect may call `type` again without corrupting the buffer.
 - The pending buffer stays bounded — sustained unmatched input always resets it, never grows it.
 - Popped layers are released for garbage collection.
+
+## API reference
+
+| Member | Returns | Description |
+|--------|---------|-------------|
+| `new Keymap(bindings?)` | `Keymap` | Create a keymap, optionally seeded with a binding map. |
+| `set(key, action)` / `set(map)` | `this` | Add or overwrite a single binding, or a whole map. |
+| `type(key, ctx?)` | `'handled' \| 'pending' \| 'unhandled'` | Dispatch one key (string or `KeyboardEvent`) and run the match. |
+| `handleKeyboardEvent(event)` | `void` | DOM handler — dispatches and calls `preventDefault()` for matches. Permanently bound. |
+| `reset()` | `void` | Clear the pending sequence buffer. Permanently bound. |
+| `push(map, options?)` | `this` | Push a layer. `{ exclusive: true }` hides everything below it. |
+| `pop()` | `this` | Remove the top layer (no-op on an empty stack). |
+| `load(bindings)` | `this` | Replace the base map; also clears layers and the buffer. |
+| `get(key)` | `binding \| undefined` | The stored binding for a key. |
+| `list()` | `{ keys, group?, description? }[]` | Active bindings, stack-aware — for help overlays. |
+| `current()` | `Map` | The active resolution map (base merged with layers). |
+| `context` | `UserContext` | Property passed to effects dispatched via `handleKeyboardEvent`. |
 
 ## Handcrafted
 

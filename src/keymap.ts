@@ -56,12 +56,12 @@ export class Keymap<UserContext> {
 
     type(event: KeyboardEvent | string, ctx?: UserContext) {
         // normalize
-        const keyInput = (typeof event === 'string') 
+        const keyInput = (typeof event === 'string')
             ? event.toLowerCase()
             : stringifyKeyInput(event)
 
         // prevent lone modifiers to mess up the buffer
-        if (isModifier(keyInput)) return; 
+        if (isModifier(keyInput)) return;
 
         this.#buffer.push(keyInput)
 
@@ -84,7 +84,7 @@ export class Keymap<UserContext> {
 
         // --- we have a match! ---
 
-        const {effect} = binding
+        const { effect } = binding
         this.#buffer = [] // clear buffer early, so effects may call .type()
 
         let preventDefault = binding.preventDefault ?? true
@@ -138,21 +138,20 @@ export class Keymap<UserContext> {
         return this
     }
 
-  push(map: Record<string, AnyBinding<UserContext>>, opts: PushOptions) {
-      const normalized = Object.fromEntries(
-          Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
-      );
-      this.#map.push(normalized, opts);
-      return this;
-  }
+    push(map: Record<string, AnyBinding<UserContext>>, opts: PushOptions) {
+        const normalized = Object.fromEntries(
+            Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
+        );
+        this.#map.push(normalized, opts);
+        return this;
+    }
 
     pop() { this.#map.pop(); return this; }
 
     #fullReset() {
-        this.#map.clear()
+        this.#map.reset()
         this.#buffer = []
     }
-
 
     current() {
         return this.#map

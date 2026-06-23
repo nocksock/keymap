@@ -729,3 +729,19 @@ describe('performance & memory', () => {
     })
 })
 
+describe('load() vs the layer stack', () => {
+    it("load() clears the stack — a later pop() does not resurrect a layer", () => {
+        const top = vi.fn()
+        const newBase = vi.fn()
+        const km = new Keymap({ 'j': () => {} })
+
+        km.push({ 'j': top })
+        km.load({ 'j': newBase }) // fresh slate: base replaced AND stack cleared
+        km.pop()                  // nothing should remain to pop back to
+
+        km.type('j')
+        expect(newBase).toHaveBeenCalledOnce() // still the loaded base...
+        expect(top).not.toHaveBeenCalled()     // ...not a resurrected pre-load layer
+    })
+})
+

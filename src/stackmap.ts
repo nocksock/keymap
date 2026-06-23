@@ -37,4 +37,10 @@ export class StackMap<V> extends Map<string, V> {
         if (previous) this.#replace(previous)
         return this
     }
+
+    reset() {
+        const base = this.#stack[0] ?? new Map()
+        this.#stack = []
+        this.#replace(base)
+    }
 }

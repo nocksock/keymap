@@ -58,11 +58,11 @@ Modifiers and named keys register in canonical lowercase. A `Shift+H` press matc
 
 ### `type(key, ctx?)`
 
-Feeds one key to the map and runs the matching action. The `key` can be a string, a parsed input, or a `KeyboardEvent`-shaped object.
+Feeds one key to the map and runs the matching action. The `key` can be a string or a `KeyboardEvent`-shaped object.
 
 ```ts
 km.type('a')
-km.type(parseInput('ctrl+b'))
+km.type('ctrl+b')
 km.type(escapeEvent) // { key: 'Escape', ... }
 ```
 
@@ -73,6 +73,8 @@ km.type(escapeEvent) // { key: 'Escape', ... }
 | `'handled'` | a binding matched and fired |
 | `'unhandled'` | nothing matched |
 | `'pending'` | a multi-key sequence is partway through |
+
+The result comes back synchronously, so you can drive UI from it — surface a which-key-style hint or a "waiting for the next key" indicator while a sequence is `'pending'`, clear it on `'handled'`, and optionally flash feedback on `'unhandled'`.
 
 ```ts
 const km = new Keymap({ 'g g': goTop, 'g e': goEnd })
@@ -116,6 +118,18 @@ The DOM entry point. It dispatches the event and calls `preventDefault()` for ma
 km.handleKeyboardEvent(gEvent)     // 'pending'
 km.handleKeyboardEvent(shiftEvent) // ignored
 km.handleKeyboardEvent(gEvent)     // completes 'g g'
+```
+
+`handleKeyboardEvent` is permanently bound to its keymap, so you can pass it straight to `addEventListener` / `removeEventListener` — no wrapping arrow, no `.bind`. Attach it to `document`, `window`, or any element, and detaching is symmetric:
+
+```ts
+// in a custom element
+connectedCallback() {
+  this.addEventListener('keydown', this.km.handleKeyboardEvent)
+}
+disconnectedCallback() {
+  this.removeEventListener('keydown', this.km.handleKeyboardEvent)
+}
 ```
 
 ## Context and the effect signature
@@ -209,6 +223,37 @@ km2.type('g') // 'handled' — goTop
 
 Popping the layer restores the base behaviour exactly.
 
+## Introspection
+
+### `get(key)`
+
+Returns the stored binding for a key (or `undefined`). Object-form bindings keep their `group` and `description`:
+
+```ts
+km.get('a') // { group: 'nav', description: 'do a', effect: … }
+```
+
+### `list()`
+
+Returns one entry per active binding — `{ keys, group?, description? }` — for building help overlays or cheat sheets. It is stack-aware: a pushed layer shadows the base for the same key, so each key appears once, with the active layer's metadata. Re-read it after each `push`/`pop` to keep a live which-key panel or cheat sheet in sync with the current mode.
+
+```ts
+const km = new Keymap({
+  'j': { group: 'nav', description: 'down', effect: moveDown },
+  'k': { group: 'nav', description: 'up',   effect: moveUp },
+})
+
+km.list()
+// [
+//   { keys: 'j', group: 'nav', description: 'down' },
+//   { keys: 'k', group: 'nav', description: 'up' },
+// ]
+```
+
+### `current()`
+
+Returns the active resolution map (base merged with pushed layers).
+
 ## Replacing bindings
 
 ### `load(bindings)`
@@ -222,7 +267,7 @@ km.load({ 'b': newAction }) // old bindings gone, stack cleared
 
 ### `set(key, action)`
 
-Overwrites a single binding.
+Overwrites or adds a single binding.
 
 ```ts
 km.set('x', replacement)
@@ -243,37 +288,6 @@ km.type('g') // 'pending'
 km.reset()   // buffer cleared; layers untouched
 km.type('g') // a fresh first 'g'
 ```
-
-## Introspection
-
-### `get(key)`
-
-Returns the stored binding for a key (or `undefined`). Object-form bindings keep their `group` and `description`:
-
-```ts
-km.get('a') // { group: 'nav', description: 'do a', effect: … }
-```
-
-### `list()`
-
-Returns one entry per active binding — `{ keys, group?, description? }` — for building help overlays or cheat sheets. It is stack-aware: a pushed layer shadows the base for the same key, so each key appears once, with the active layer's metadata.
-
-```ts
-const km = new Keymap({
-  'j': { group: 'nav', description: 'down', effect: moveDown },
-  'k': { group: 'nav', description: 'up',   effect: moveUp },
-})
-
-km.list()
-// [
-//   { keys: 'j', group: 'nav', description: 'down' },
-//   { keys: 'k', group: 'nav', description: 'up' },
-// ]
-```
-
-### `current()`
-
-Returns the active resolution map (base merged with pushed layers).
 
 ## Notes
 

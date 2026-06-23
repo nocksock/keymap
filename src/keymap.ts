@@ -1,33 +1,40 @@
 import { raise } from "./errors";
-import { stringifyKeyInput } from "./keys";
+import { isModifier, stringifyKeyInput } from "./keys";
 import { filterByPrefix } from "./maps";
 import { StackMap } from "./stackmap";
 
-export type Binding<Context = undefined> = {
+export type EffectContext<UserContext> = {
+    permitDefault: () => void
+    context: UserContext,
+}
+
+export type Binding<Context = unknown> = {
     /** so the can be grouped in eg. "navigation", "formatting" */
     group?: string
     description?: string,
-    effect: (context: Context) => void
+    preventDefault?: boolean,
+    effect: (context: EffectContext<Context>) => void
+    [ORIGINAL]?: BindingFunction<Context>
 }
 
-export type BindingFunction<Context> = (context: Context) => void
+export type BindingFunction<Context> = (context: EffectContext<Context>) => void
 export type AnyBinding<Context> = Binding<Context> | BindingFunction<Context>
 export type TypeState = 'pending' | 'handled' | 'unhandled'
 
 const ORIGINAL = Symbol()
 
-export class Keymap<Context = undefined> {
-    #map = new StackMap<Binding<Context>>({
+export class Keymap<UserContext> {
+    #map = new StackMap<Binding<UserContext>>({
         shadowByPrefix: true
     });
     #buffer: string[] = []
-    context?: Context;
+    context?: UserContext;
 
-    constructor(initial?: Record<string, AnyBinding<Context>>) {
+    constructor(initial?: Record<string, AnyBinding<UserContext>>) {
         if (initial) this.set(initial)
     }
 
-    set(keyOrMap: string | Record<string, AnyBinding<Context>>, a2?: AnyBinding<Context>): this {
+    set(keyOrMap: string | Record<string, AnyBinding<UserContext>>, a2?: AnyBinding<UserContext>): this {
         if (typeof keyOrMap === 'object') {
             Object.entries(keyOrMap).forEach(([keys, binding]) => {
                 return this.set(keys, binding)
@@ -47,36 +54,61 @@ export class Keymap<Context = undefined> {
         return this;
     }
 
-    type(event: KeyboardEvent | string, ctx?: Context) {
-        event = (typeof event === 'string') ? event.toLowerCase() : stringifyKeyInput(event)
-        this.#buffer.push(event)
+    type(event: KeyboardEvent | string, ctx?: UserContext) {
+        // normalize
+        const keyInput = (typeof event === 'string') 
+            ? event.toLowerCase()
+            : stringifyKeyInput(event)
+
+        // prevent lone modifiers to mess up the buffer
+        if (isModifier(keyInput)) return; 
+
+        this.#buffer.push(keyInput)
+
         const current = this.#buffer.join(' ')
         const matches = filterByPrefix(this.#map, current)
-        if (matches.length === 1 ) {
-            const [keys, binding] = matches[0];
-            if (current.length < keys.length) return 'pending'
-            const {effect} = binding
-            this.#buffer = [] // clear buffer early, so effects could call type
-            if (typeof effect === 'function') {
-                // @ts-ignore
-                effect(ctx || this.context)
-                return 'handled'
-            }
-        }
+
         if (matches.length === 0) {
             this.#buffer = []
             return 'unhandled'
         }
 
-        return 'pending'
+        if (matches.length > 1) {
+            return 'pending'
+        }
+
+        const [keys, binding] = matches[0];
+        if (current.length < keys.length) {
+            return 'pending'
+        }
+
+        // --- we have a match! ---
+
+        const {effect} = binding
+        this.#buffer = [] // clear buffer early, so effects may call .type()
+
+        let preventDefault = binding.preventDefault ?? true
+        const permitDefault = () => preventDefault = false
+        effect({ permitDefault, context: ctx as UserContext })
+
+        if (preventDefault && typeof event !== 'string' && 'preventDefault' in event) {
+            event.preventDefault()
+        }
+
+        return 'handled'
     }
+
 
     // using an arrow function so it can be used as an event handler without needing to bind it
     handleKeyboardEvent = (e: KeyboardEvent) => {
         this.type(e, this.context)
     }
 
-    #normalizeBinding(binding: AnyBinding<Context>) {
+    reset = () => {
+        this.#buffer = []
+    }
+
+    #normalizeBinding(binding: AnyBinding<UserContext>): Binding<UserContext> {
         if (typeof binding === 'function') {
             return {
                 effect: binding,
@@ -90,7 +122,7 @@ export class Keymap<Context = undefined> {
         return binding
     }
 
-    #unwrapBinding(binding: Binding<Context>): AnyBinding<Context> {
+    #unwrapBinding(binding: Binding<UserContext>): AnyBinding<UserContext> {
         // @ts-ignore
         return binding[ORIGINAL]
     }
@@ -100,13 +132,13 @@ export class Keymap<Context = undefined> {
         return binding ? this.#unwrapBinding(binding) : undefined
     }
 
-    load(bindings: Record<string, AnyBinding<Context>>) {
-        this.#reset()
+    load(bindings: Record<string, AnyBinding<UserContext>>) {
+        this.#fullReset()
         this.set(bindings)
         return this
     }
 
-  push(map: Record<string, AnyBinding<Context>>) {
+  push(map: Record<string, AnyBinding<UserContext>>) {
       const normalized = Object.fromEntries(
           Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
       );
@@ -117,12 +149,23 @@ export class Keymap<Context = undefined> {
 
     pop() { this.#map.pop(); return this; }
 
-    #reset() {
+    #fullReset() {
         this.#map.clear()
         this.#buffer = []
     }
 
+
     current() {
         return this.#map
     }
+
+    list() {
+        return [...this.#map.entries()].map(([keys, binding]) => {
+            return {
+                ...binding,
+                keys
+            }
+        })
+    }
+
 }

@@ -2,10 +2,6 @@ export const filterByPrefix = <R>(map: Map<string, R>, prefix: string) => {
     return [...map.entries().filter(([keys, _]) => keys.startsWith(prefix))]
 }
 
-export const rejectByPrefix = <R>(map: Map<string, R>, prefix: string) => {
-    return [...map.entries().filter(([keys, _]) => !keys.startsWith(prefix))]
-}
-
 const toEntries = <C>(m: Map<string, C> | Record<string, C>): [string, C][] =>
     m instanceof Map ? [...m.entries()] : Object.entries(m)
 

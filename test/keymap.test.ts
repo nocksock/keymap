@@ -255,7 +255,7 @@ describe('object binding config ({ group, description, effect })', () => {
 
         km.type('a', ctx)
 
-        expect(fn).toHaveBeenCalledWith(ctx)
+        expect(fn).toHaveBeenCalledWith(expect.objectContaining({context: ctx}))
     })
 
     it("mixes object-form and function-form bindings in one map", () => {
@@ -441,5 +441,146 @@ describe('edge cases', () => {
         km.type(evt('H', { shiftKey: true }))
 
         expect(fn).toHaveBeenCalledOnce()
+    })
+
+    it("ignores a lone modifier keydown mid-sequence", () => {
+        const gg = vi.fn()
+        const km = new Keymap({ 'g g': gg })
+
+        km.handleKeyboardEvent(evt('g'))
+        km.handleKeyboardEvent(evt('Shift', { shiftKey: true })) // lone modifier — must not pollute the buffer
+        km.handleKeyboardEvent(evt('g'))
+
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("preventDefault is called for a matched key but not an unmatched one", () => {
+        const km = new Keymap({ 'a': () => {} })
+
+        const matched = evt('a'); matched.preventDefault = vi.fn()
+        km.handleKeyboardEvent(matched)
+        expect(matched.preventDefault).toHaveBeenCalled()
+
+        const missed = evt('z'); missed.preventDefault = vi.fn()
+        km.handleKeyboardEvent(missed)
+        expect(missed.preventDefault).not.toHaveBeenCalled()
+    })
+})
+
+describe.sequential('keymap.list (introspection)', () => {
+    it("lists each binding with its keys, group and description", () => {
+        const km = new Keymap({
+            'j': { group: 'nav', description: 'down', effect: () => {} },
+            'k': { group: 'nav', description: 'up', effect: () => {} },
+        })
+
+        expect(km.list()).toEqual(expect.arrayContaining([
+            expect.objectContaining({ keys: 'j', group: 'nav', description: 'down' }),
+            expect.objectContaining({ keys: 'k', group: 'nav', description: 'up' }),
+        ]))
+    })
+
+    it("includes function-form bindings (no metadata)", () => {
+        const km = new Keymap({ 'a': () => {} })
+
+        expect(km.list()).toEqual([expect.objectContaining({ keys: 'a' })])
+    })
+
+    it("is stack-aware: a pushed layer shadows the base for the same key (no duplicate)", () => {
+        const km = new Keymap({ 'j': { group: 'base', description: 'b', effect: () => {} } })
+        km.push({ 'j': { group: 'layer', description: 'l', effect: () => {} } })
+
+        const j = km.list().filter((e) => e.keys === 'j')
+        expect(j).toHaveLength(1) // shadowed, not listed twice
+        expect(j[0]).toMatchObject({ group: 'layer', description: 'l' })
+    })
+
+    it("returns the base metadata again after the layer is popped", () => {
+        const km = new Keymap({ 'j': { group: 'base', description: 'b', effect: () => {} } })
+        km.push({ 'j': { group: 'layer', description: 'l', effect: () => {} } })
+        km.pop()
+
+        expect(km.list().find((e) => e.keys === 'j')).toMatchObject({ group: 'base' })
+    })
+})
+
+describe('preventDefault opt-out', () => {
+    const evt = (key: string, mods: Partial<Record<'ctrlKey'|'altKey'|'shiftKey'|'metaKey', boolean>> = {}) =>
+        ({ key, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, preventDefault: vi.fn(), ...mods }) as any
+
+    it("suppresses the default for a matched key by default", () => {
+        const km = new Keymap({ 'a': () => {} })
+        const e = evt('a')
+
+        km.handleKeyboardEvent(e)
+
+        expect(e.preventDefault).toHaveBeenCalled() // baseline: prevents by default
+    })
+
+    it("a binding with preventDefault:false lets the default through", () => {
+        const km = new Keymap({ 'a': { preventDefault: false, effect: () => {} } })
+        const e = evt('a')
+
+        km.handleKeyboardEvent(e)
+
+        expect(e.preventDefault).not.toHaveBeenCalled()
+    })
+
+    it("ctx.permitDefault() opts out at runtime for this press", () => {
+        const km = new Keymap({ 'a': (ctx: any) => ctx.permitDefault() })
+        const e = evt('a')
+
+        km.handleKeyboardEvent(e)
+
+        expect(e.preventDefault).not.toHaveBeenCalled()
+    })
+
+    it("permitDefault is per-press, not sticky", () => {
+        const km = new Keymap({ 'a': (ctx: any) => { if (ctx.once) ctx.permitDefault() } })
+
+        km.handleKeyboardEvent({ ...evt('a'), once: true })
+        const next = evt('a')
+        km.handleKeyboardEvent(next)
+
+        expect(next.preventDefault).toHaveBeenCalled() // a later press still prevents
+    })
+})
+
+describe('keymap.reset / blur', () => {
+    it("reset() cancels a pending sequence buffer", () => {
+        const gg = vi.fn()
+        const km = new Keymap({ 'g g': gg, 'g e': () => {} })
+
+        km.type('g') // pending
+        km.reset()
+
+        km.type('g') // buffer was cleared, so this is a fresh first 'g' (pending again)
+        expect(gg).not.toHaveBeenCalled()
+
+        km.type('g') // completes a clean 'g g'
+        expect(gg).toHaveBeenCalledOnce()
+    })
+
+    it("reset() clears the buffer but keeps pushed layers", () => {
+        const top = vi.fn()
+        const km = new Keymap({ 'a': () => {} })
+
+        km.push({ 'j': top })
+        km.reset()
+        km.type('j')
+
+        expect(top).toHaveBeenCalledOnce() // layer still active after reset
+    })
+
+    it("reset is safe to wire directly as a blur listener (detached, no event needed)", () => {
+        const gg = vi.fn()
+        const km = new Keymap({ 'g g': gg, 'g e': () => {} })
+
+        km.type('g') // pending
+        const reset = km.reset // as in addEventListener('blur', km.reset)
+        expect(() => reset()).not.toThrow()
+
+        km.type('g')
+        expect(gg).not.toHaveBeenCalled() // buffer was cleared by the detached call
     })
 })

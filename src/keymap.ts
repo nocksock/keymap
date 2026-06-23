@@ -1,7 +1,7 @@
 import { raise } from "./errors";
 import { isModifier, stringifyKeyInput } from "./keys";
 import { filterByPrefix } from "./maps";
-import { StackMap } from "./stackmap";
+import { PushOptions, StackMap } from "./stackmap";
 
 export type EffectContext<UserContext> = {
     permitDefault: () => void
@@ -138,14 +138,13 @@ export class Keymap<UserContext> {
         return this
     }
 
-  push(map: Record<string, AnyBinding<UserContext>>) {
+  push(map: Record<string, AnyBinding<UserContext>>, opts: PushOptions) {
       const normalized = Object.fromEntries(
           Object.entries(map).map(([k, b]) => [k, this.#normalizeBinding(b)])
       );
-      this.#map.push(normalized);
+      this.#map.push(normalized, opts);
       return this;
   }
-
 
     pop() { this.#map.pop(); return this; }
 

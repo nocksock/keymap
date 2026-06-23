@@ -5,6 +5,10 @@ type Options = {
     shadowByPrefix: boolean
 }
 
+export type PushOptions = {
+    exclusive: true
+}
+
 export interface StackMap<V> extends Map<string, V> {}
 
 export class StackMap<V> {
@@ -31,20 +35,15 @@ export class StackMap<V> {
         })
     }
 
-    push(map: Record<string, V>) {
+    push(map: Record<string, V>, opts: PushOptions) {
         this.#stack.push(this.#map)
 
-        if (this.#options.shadowByPrefix) {
+        if (this.#options.shadowByPrefix && !opts?.exclusive) {
             this.#map = mergeDistinctPrefix(this.#map, map);
-        } else {
-            this.#map = new Map([...this.#map, ... (
-                typeof map === 'object'
-                    ? map instanceof Map
-                        ? map
-                        : Object.entries(map)
-                    : raise("push expects Map or {}")
-            )])
-        }
+            return this;
+        } 
+
+        this.#map = new Map(Object.entries(map))
 
         return this
     }

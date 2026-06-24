@@ -26,6 +26,8 @@ const editor = new Keymap({
 document.addEventListener('keydown', (e) => editor.handleKeyboardEvent(e))
 ```
 
+> **Tip:** the test suite (`test/`) doubles as documentation — it's the most thorough, runnable set of usage examples, covering every feature and edge case described below.
+
 ## Bindings
 
 A binding map pairs a key string with an action. An action is either a plain function or an object with an `effect`:

@@ -26,6 +26,8 @@ const editor = new Keymap({
 document.addEventListener('keydown', editor.handleKeyboardEvent)
 ```
 
+> **Tip:** the test suite (`test/`) doubles as documentation — it's the most thorough, runnable set of usage examples, covering every feature and edge case described below.
+
 ## Bindings
 
 A binding map pairs a key string with an action. An action is either a plain function or an object with an `effect`:
@@ -53,6 +55,26 @@ new Keymap({ 'a': 123 }) // throws
 | Sequence | `'g g'`, `'g a b'` | keys pressed in order |
 
 Modifiers and named keys register in canonical lowercase. A `Shift+H` press matches a `'shift+h'` binding; a spacebar press matches `'space'`.
+
+### Key overview
+
+Keys are case-insensitive (a capital letter is `shift+<letter>`). Any single character below, or a named key, is valid:
+
+| Group | Keys |
+|-------|------|
+| Letters | `a`–`z` |
+| Digits | `0`–`9` |
+| Symbols | `` ` `` `~` `!` `@` `#` `$` `%` `^` `&` `*` `(` `)` `-` `=` `[` `]` `{` `}` `\` `\|` `;` `:` `'` `"` `,` `.` `<` `>` `/` `?` `_` |
+| Named | `space` `tab` `enter` `backspace` `delete` `escape` (alias `esc`) `home` `end` `pageup` `pagedown` |
+| Arrows | `arrowup` `arrowdown` `arrowleft` `arrowright` |
+| Function | `f1`–`f12` |
+| Modifiers | `ctrl` `cmd` (alias `meta`) `shift` `alt` `super` (cmd on macOS, ctrl elsewhere) |
+
+Notes:
+
+- Combine modifiers with `+` (or `-`, e.g. `ctrl-s`); order doesn't matter (`shift+ctrl+a` === `ctrl+shift+a`).
+- `super` resolves per-OS, so `super+s` is ⌘S on macOS and Ctrl+S elsewhere.
+- The literal `+` key can't be expressed (it's the separator) — use the other keys around it. `-` works as a key (e.g. `ctrl+-`).
 
 ## Dispatching keys
 

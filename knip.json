@@ -1,0 +1,4 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["web-test-runner.config.mjs", "test/*.browser-test.ts"]
+}

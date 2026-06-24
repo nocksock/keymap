@@ -545,6 +545,40 @@ describe('preventDefault opt-out', () => {
 
         expect(next.preventDefault).toHaveBeenCalled() // a later press still prevents
     })
+
+    // proposed opt-in: prevent the default for incomplete sequences too, so a
+    // half-typed prefix (the 'g' of 'g g') doesn't leak its browser default.
+    it("{ pendingPreventDefault: true } prevents default on pending keys", () => {
+        const km = new Keymap(
+            { 'g g': () => {}, 'g e': () => {} },
+            { pendingPreventDefault: true },
+        )
+
+        const e = evt('g') // ambiguous prefix → 'pending'
+        expect(km.type(e)).toBe('pending')
+        expect(e.preventDefault).toHaveBeenCalled() // default already suppressed mid-sequence
+
+        // default (option off) still lets a pending key through, as today
+        const km2 = new Keymap({ 'g g': () => {}, 'g e': () => {} })
+        const e2 = evt('g')
+        expect(km2.type(e2)).toBe('pending')
+        expect(e2.preventDefault).not.toHaveBeenCalled()
+    })
+
+    it("a binding's own { pendingPreventDefault: true } prevents default on its prefix", () => {
+        // keymap option off; the flag lives on the binding itself
+        const km = new Keymap({ 'd w': { pendingPreventDefault: true, effect: () => {} } })
+
+        const e = evt('d') // prefix of 'd w' → pending
+        expect(km.type(e)).toBe('pending')
+        expect(e.preventDefault).toHaveBeenCalled()
+
+        // a plain binding (no flag, option off) still lets the prefix through
+        const km2 = new Keymap({ 'd w': () => {} })
+        const e2 = evt('d')
+        expect(km2.type(e2)).toBe('pending')
+        expect(e2.preventDefault).not.toHaveBeenCalled()
+    })
 })
 
 describe('keymap.reset / blur', () => {

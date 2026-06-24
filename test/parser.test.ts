@@ -110,10 +110,16 @@ describe('parseInput — normalization', () => {
   })
 
   it('parses named keys', () => {
-    for (const k of ['escape', 'esc', 'space', 'tab', 'enter', 'arrowup', 'f1', 'f12', 'home', 'pagedown']) {
+    for (const k of ['escape', 'tab', 'enter', 'arrowup', 'f1', 'f12', 'home', 'pagedown']) {
       expect(parseInput(k)).toEqual(def(k))
     }
     expect(parseInput('ctrl+arrowleft')).toEqual(ctrl('arrowleft'))
+  })
+
+  it("canonicalizes the spacebar to the readable 'space', both ways", () => {
+    expect(canonicalize('space')).toBe('space')      // a 'space' binding
+    expect(canonicalize(def(' '))).toBe('space')     // a real space event (e.key === ' ')
+    expect(canonicalize('a space')).toBe('a space')  // sequences read cleanly (no literal double-space)
   })
 
   it('parses number and symbol keys', () => {
@@ -182,5 +188,34 @@ describe('isModifier', () => {
     for (const k of ['a', 'space', 'escape', 'f1']) {
       expect(isModifier(k)).toBe(false)
     }
+  })
+})
+
+describe('key aliases', () => {
+  const aliases = [
+    ['up', 'arrowup'],
+    ['down', 'arrowdown'],
+    ['left', 'arrowleft'],
+    ['right', 'arrowright'],
+    ['esc', 'escape'],
+  ] as const
+
+  it('parseInput resolves the short name to the canonical key', () => {
+    for (const [alias, canonical] of aliases) {
+      expect(parseInput(alias)).toEqual(def(canonical))
+    }
+  })
+
+  it('canonicalize maps the alias (with modifiers) to the canonical key', () => {
+    for (const [alias, canonical] of aliases) {
+      expect(canonicalize(alias)).toBe(canonical)
+    }
+    expect(canonicalize('ctrl+up')).toBe('ctrl+arrowup')
+    expect(canonicalize('ctrl+esc')).toBe('ctrl+escape')
+  })
+
+  it('the canonical names still work', () => {
+    expect(canonicalize('arrowleft')).toBe('arrowleft')
+    expect(canonicalize('escape')).toBe('escape')
   })
 })

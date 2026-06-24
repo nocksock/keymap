@@ -12,14 +12,18 @@ export type Binding<Context = unknown> = {
     /** so the can be grouped in eg. "navigation", "formatting" */
     group?: string
     description?: string,
-    preventDefault?: boolean,
     effect: (context: EffectContext<Context>) => void
     [ORIGINAL]?: BindingFunction<Context>
-}
+} & KeymapOptions
 
 export type BindingFunction<Context> = (context: EffectContext<Context>) => void
 export type AnyBinding<Context> = Binding<Context> | BindingFunction<Context>
 export type TypeState = 'pending' | 'handled' | 'unhandled'
+export type KeymapOptions = {
+    preventDefault?: boolean,
+    /** When starting to enter a sequence that partially matches a mapping, should default behaviour be prevented? **/
+    pendingPreventDefault?: boolean
+}
 
 const ORIGINAL = Symbol()
 
@@ -29,8 +33,13 @@ export class Keymap<UserContext> {
     });
     #buffer: string[] = []
     context?: UserContext;
+    #options: KeymapOptions = {
+        preventDefault: true,
+        pendingPreventDefault: false
+    }
 
-    constructor(initial?: Record<string, AnyBinding<UserContext>>) {
+    constructor(initial?: Record<string, AnyBinding<UserContext>>, opts?: Partial<KeymapOptions>) {
+        Object.assign(this.#options, opts || {})
         if (initial) this.set(initial)
     }
 
@@ -71,12 +80,11 @@ export class Keymap<UserContext> {
             return 'unhandled'
         }
 
-        if (matches.length > 1) {
-            return 'pending'
-        }
-
         const [keys, binding] = matches[0];
-        if (current.length < keys.length) {
+        if (matches.length > 1 || current.length < keys.length) {
+            if(this.#options.pendingPreventDefault || binding.pendingPreventDefault) {
+                this.#maybePreventDefault(event)
+            }
             return 'pending'
         }
 
@@ -89,13 +97,18 @@ export class Keymap<UserContext> {
         const permitDefault = () => preventDefault = false
         effect({ permitDefault, context: ctx as UserContext })
 
-        if (preventDefault && typeof event !== 'string' && 'preventDefault' in event) {
-            event.preventDefault()
+        if (preventDefault) {
+            this.#maybePreventDefault(event)
         }
 
         return 'handled'
     }
 
+    #maybePreventDefault(event: Parameters<typeof this.type>[0]) {
+        if (typeof event !== 'string' && 'preventDefault' in event) {
+            event.preventDefault()
+        }
+    }
 
     // using an arrow function so it can be used as an event handler without needing to bind it
     handleKeyboardEvent = (e: KeyboardEvent) => {

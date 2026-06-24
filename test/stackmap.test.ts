@@ -21,7 +21,7 @@ describe("StackMap", () => {
         expect(smap.get("baz")).toEqual(undefined)
         expect(smap.get("foo")).toEqual(foo)
     })
-    it.only("can shadow prefixes", () => {
+    it("can shadow prefixes", () => {
         const smap = new StackMap({ shadowByPrefix: true })
         smap.set("f", "base")
         smap.set("o", "base")

@@ -66,13 +66,14 @@ Keys are case-insensitive (a capital letter is `shift+<letter>`). Any single cha
 | Digits | `0`–`9` |
 | Symbols | `` ` `` `~` `!` `@` `#` `$` `%` `^` `&` `*` `(` `)` `-` `=` `[` `]` `{` `}` `\` `\|` `;` `:` `'` `"` `,` `.` `<` `>` `/` `?` `_` |
 | Named | `space` `tab` `enter` `backspace` `delete` `escape` (alias `esc`) `home` `end` `pageup` `pagedown` |
-| Arrows | `arrowup` `arrowdown` `arrowleft` `arrowright` |
+| Arrows | `arrowup` `arrowdown` `arrowleft` `arrowright` (aliases `up` `down` `left` `right`) |
 | Function | `f1`–`f12` |
 | Modifiers | `ctrl` `cmd` (alias `meta`) `shift` `alt` `super` (cmd on macOS, ctrl elsewhere) |
 
 Notes:
 
 - Combine modifiers with `+` (or `-`, e.g. `ctrl-s`); order doesn't matter (`shift+ctrl+a` === `ctrl+shift+a`).
+- Aliases resolve to their canonical key (`up` → `arrowup`, `esc` → `escape`), so a binding and the matching event always agree.
 - `super` resolves per-OS, so `super+s` is ⌘S on macOS and Ctrl+S elsewhere.
 - The literal `+` key can't be expressed (it's the separator) — use the other keys around it. `-` works as a key (e.g. `ctrl+-`).
 
@@ -182,6 +183,15 @@ new Keymap({ 'a': (ctx) => ctx.permitDefault() })
 ```
 
 `permitDefault()` is not sticky — a later press of the same key prevents the default again.
+
+### Pending keys
+
+By default only *matched* keys prevent the default — an incomplete sequence (the `g` of `g g`) passes through. Opt in to prevent the default on pending keys too, so a half-typed prefix never leaks a browser shortcut. Set it for the whole keymap, or per binding:
+
+```ts
+new Keymap({ 'g g': goTop }, { pendingPreventDefault: true })   // keymap-wide
+new Keymap({ 'g g': { pendingPreventDefault: true, effect: goTop } }) // single binding
+```
 
 ## Layers (`push` / `pop`)
 
@@ -321,7 +331,7 @@ km.type('g') // a fresh first 'g'
 
 | Member | Returns | Description |
 |--------|---------|-------------|
-| `new Keymap(bindings?)` | `Keymap` | Create a keymap, optionally seeded with a binding map. |
+| `new Keymap(bindings?, options?)` | `Keymap` | Create a keymap, optionally seeded with a binding map. Options: `{ pendingPreventDefault }`. |
 | `set(key, action)` / `set(map)` | `this` | Add or overwrite a single binding, or a whole map. |
 | `type(key, ctx?)` | `'handled' \| 'pending' \| 'unhandled'` | Dispatch one key (string or `KeyboardEvent`) and run the match. |
 | `handleKeyboardEvent(event)` | `void` | DOM handler — dispatches and calls `preventDefault()` for matches. Permanently bound. |

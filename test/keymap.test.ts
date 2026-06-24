@@ -564,6 +564,21 @@ describe('preventDefault opt-out', () => {
         expect(km2.type(e2)).toBe('pending')
         expect(e2.preventDefault).not.toHaveBeenCalled()
     })
+
+    it("a binding's own { pendingPreventDefault: true } prevents default on its prefix", () => {
+        // keymap option off; the flag lives on the binding itself
+        const km = new Keymap({ 'd w': { pendingPreventDefault: true, effect: () => {} } })
+
+        const e = evt('d') // prefix of 'd w' → pending
+        expect(km.type(e)).toBe('pending')
+        expect(e.preventDefault).toHaveBeenCalled()
+
+        // a plain binding (no flag, option off) still lets the prefix through
+        const km2 = new Keymap({ 'd w': () => {} })
+        const e2 = evt('d')
+        expect(km2.type(e2)).toBe('pending')
+        expect(e2.preventDefault).not.toHaveBeenCalled()
+    })
 })
 
 describe('keymap.reset / blur', () => {

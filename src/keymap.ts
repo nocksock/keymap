@@ -20,9 +20,8 @@ export type BindingFunction<Context> = (context: EffectContext<Context>) => void
 export type AnyBinding<Context> = Binding<Context> | BindingFunction<Context>
 export type TypeState = 'pending' | 'handled' | 'unhandled'
 export type KeymapOptions = {
-    /** When starting to enter a sequence that partially matches a mapping,
-    *  default behaviour be prevented? **/
     preventDefault?: boolean,
+    /** When starting to enter a sequence that partially matches a mapping, should default behaviour be prevented? **/
     pendingPreventDefault?: boolean
 }
 
@@ -35,6 +34,7 @@ export class Keymap<UserContext> {
     #buffer: string[] = []
     context?: UserContext;
     #options: KeymapOptions = {
+        preventDefault: true,
         pendingPreventDefault: false
     }
 

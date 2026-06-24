@@ -25,9 +25,11 @@ export class StackMap<V> extends Map<string, V> {
     push(map: Record<string, V>, opts?: PushOptions) {
         this.#stack.push(new Map(this))
         this.#replace(
-            this.#shadowByPrefix && !opts?.exclusive
-                ? mergeDistinctPrefix(this, map)
-                : new Map(Object.entries(map))
+            opts?.exclusive
+                ? new Map(Object.entries(map))                  // only the new layer
+                : this.#shadowByPrefix
+                    ? mergeDistinctPrefix(this, map)            // fall through, drop prefix conflicts
+                    : new Map([...this, ...Object.entries(map)]) // fall through, override
         )
         return this
     }

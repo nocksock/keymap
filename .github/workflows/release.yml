@@ -1,0 +1,121 @@
+name: Release
+
+# Auto-release strategy: on every push to main, release IF the HEAD commit is a
+# verified, maintainer-signed commit AND package.json carries a version that has
+# not been released yet (no matching git tag). This makes the last signed commit
+# the release boundary — unsigned commits accumulate until the next signed one.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create tag + GitHub release
+  id-token: write # npm provenance attestation
+
+env:
+  MAINTAINER_EMAIL: nils@bleepbloop.studio
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Release boundary guard: never release with a focused test left in the
+          # tree (it.only / describe.only silently skips sibling tests).
+          if grep -rnE '(it|describe|test|suite|context|bench)\.only' test; then
+            echo "::error::Focused test (.only) present — refusing to release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+
+          commit=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}")
+          verified=$(echo "$commit" | jq -r '.commit.verification.verified')
+          author=$(echo "$commit" | jq -r '.commit.author.email')
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "HEAD: verified=$verified author=$author version=$version"
+
+          if [ "$verified" != "true" ]; then
+            echo "::notice::HEAD is not a verified signed commit — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$author" != "$MAINTAINER_EMAIL" ]; then
+            echo "::notice::HEAD author ($author) is not the maintainer — skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "::notice::Tag v$version already exists — version not bumped, skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          echo "::notice::Releasing v$version."
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: guard
+    if: needs.guard.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test (unit + browser)
+        run: pnpm run test:ci
+
+      - name: Publish to npm (with provenance)
+        run: pnpm publish --no-git-checks --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v${{ needs.guard.outputs.version }}"
+          git tag "$tag"
+          git push origin "$tag"
+          gh release create "$tag" --title "$tag" --target "${{ github.sha }}" --generate-notes

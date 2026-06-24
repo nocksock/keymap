@@ -5,7 +5,16 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(n
 export const isModifier = (key: string): key is Modifier => MODIFIER_KEYS.includes(key as any)
 
 // A valid key is a single char (\w covers a-z0-9_, plus the symbol class) or a named key.
-const VALID_KEY = /^([\w`~!@#$%^&*()\-=+[{}\]\\|;:'",<.>/?]|space|tab|enter|backspace|delete|escape|esc|arrow(up|down|left|right)|f[1-9]|f1[0-2]|home|end|page(up|down))$/
+const VALID_KEY = /^([\w`~!@#$%^&*()\-=+[{}\]\\|;:'",<.>/?]|space|tab|enter|backspace|delete|escape|esc|(arrow)?(up|down|left|right)|f[1-9]|f1[0-2]|home|end|page(up|down))$/
+const ALIAS_KEYS = {
+    // <alias> : <canonical>
+    'up': 'arrowup',
+    'down': 'arrowdown',
+    'left': 'arrowleft',
+    'right': 'arrowright',
+    'esc': 'escape',
+    ' ': 'space',
+}
 
 export const parseDefinition = (definition: string) =>
   definition
@@ -28,7 +37,8 @@ export const parseInput = (input: string): KeyInput => {
     altKey: mods.includes('alt'),
     metaKey: mods.includes('cmd') || mods.includes('meta') || (hasSuper && IS_MAC),
     shiftKey: mods.includes('shift'),
-    key
+    // @ts-ignore
+    key: ALIAS_KEYS[key] || key
   }
 }
 
@@ -47,8 +57,9 @@ const stringifyKeyInput = (key: KeyInput) => {
   if (key.altKey) mods.push('alt');
   if (key.shiftKey) mods.push('shift');
   if (key.metaKey) mods.push('cmd');
-  if (!isModifier(key.key.toLowerCase())) {
-    mods.push(key.key === ' ' ? 'space' : key.key.toLowerCase());
+  const namedKey = key.key.toLowerCase();
+  if (!isModifier(namedKey)) {
+    mods.push(ALIAS_KEYS[namedKey as keyof typeof ALIAS_KEYS] || namedKey);
   }
   return mods.join('+');
 };

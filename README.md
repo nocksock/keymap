@@ -2,7 +2,7 @@
 
 A tiny keyboard-shortcut dispatcher: bind keys (and multi-key sequences) to actions, with stackable layers for modal UIs.
 
-- **~3.21 kB** minified, **~1.53 kB** gzipped
+- **~3.27 kB** minified, **~1.54 kB** gzipped
 - **Zero dependencies**
 - Single-key, modifier, and multi-key Vim-style sequences (`g g`, `d w`)
 - Stackable layers (`push`/`pop`) for modes and contextual overrides
